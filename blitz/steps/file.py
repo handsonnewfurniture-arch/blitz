@@ -6,6 +6,12 @@ import json
 import os
 from typing import Any
 
+try:
+    import orjson
+    _ORJSON = True
+except ImportError:
+    _ORJSON = False
+
 from blitz.steps import BaseStep, StepRegistry
 
 
@@ -38,8 +44,12 @@ class FileStep(BaseStep):
                 fmt = "text"
 
         if fmt == "json":
-            with open(path, "r") as f:
-                data = json.load(f)
+            if _ORJSON:
+                with open(path, "rb") as f:
+                    data = orjson.loads(f.read())
+            else:
+                with open(path, "r") as f:
+                    data = json.load(f)
             if isinstance(data, list):
                 return data
             return [data]

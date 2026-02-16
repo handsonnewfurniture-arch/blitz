@@ -4,6 +4,25 @@ from functools import lru_cache
 
 from blitz.exceptions import ExpressionError
 
+# Try native C engine first — 20-50x faster for filter/compute
+try:
+    from blitz.native.expr_engine import (
+        compile_expr as _native_compile,
+        eval_filter as native_eval_filter,
+        eval_compute as native_eval_compute,
+        native_select,
+        native_dedupe,
+        native_sort,
+    )
+    NATIVE_AVAILABLE = True
+except ImportError:
+    NATIVE_AVAILABLE = False
+    native_eval_filter = None
+    native_eval_compute = None
+    native_select = None
+    native_dedupe = None
+    native_sort = None
+
 SAFE_OPS = {
     ast.Gt: operator.gt,
     ast.Lt: operator.lt,
@@ -32,6 +51,39 @@ SAFE_BUILTINS = frozenset({
     "startswith", "endswith", "title",
 })
 
+def _can_use_native(expr_str: str) -> bool:
+    """Check if expression is simple enough for the native C engine."""
+    if not NATIVE_AVAILABLE:
+        return False
+    # Native engine handles: fields, comparisons, arithmetic, and/or/not, constants
+    # Does NOT handle: method calls (.upper()), ternary (if/else), function calls
+    import re
+    # Check for method calls: letter.letter pattern (not number.number)
+    if re.search(r'[a-zA-Z_]\.(?![0-9])', expr_str):
+        return False
+    # Check for function calls (but allow parenthesized subexpressions)
+    if re.search(r'[a-zA-Z_]\s*\(', expr_str):
+        return False
+    # Check for ternary
+    if ' if ' in expr_str or ' else ' in expr_str:
+        return False
+    return True
+
+
+def compile_expr(expr_str: str):
+    """Compile a filter/compute expression into a safe callable.
+
+    Uses native C engine when available (20-50x faster).
+    Falls back to Python AST evaluator for complex expressions.
+    """
+    if _can_use_native(expr_str):
+        try:
+            return _native_compile(expr_str)
+        except (ValueError, TypeError):
+            pass  # Fall through to Python evaluator
+
+    return _compile_python(expr_str)
+
 
 @lru_cache(maxsize=256)
 def _parse_and_validate(expr_str: str) -> ast.Expression:
@@ -44,14 +96,8 @@ def _parse_and_validate(expr_str: str) -> ast.Expression:
     return tree
 
 
-def compile_expr(expr_str: str):
-    """Compile a filter/compute expression into a safe callable.
-
-    Supports: field references, comparisons, arithmetic, and/or, string methods.
-    Example: "price > 10 and category == 'electronics'"
-
-    Uses LRU cache on AST parsing for 2-5x speedup on repeated expressions.
-    """
+def _compile_python(expr_str: str):
+    """Python AST-walking evaluator (fallback for complex expressions)."""
     tree = _parse_and_validate(expr_str)
 
     def evaluator(row: dict):

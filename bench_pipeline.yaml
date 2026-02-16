@@ -1,0 +1,26 @@
+name: distance_test
+description: Blitz v0.2.0 distance/stress test
+
+steps:
+  - file:
+      action: read
+      path: bench_data.json
+      format: json
+
+  - transform:
+      filter: "price > 50 and rating > 2.0"
+      compute:
+        total_value: "price * quantity"
+        price_tier: "price > 500"
+
+  - transform:
+      select: [id, name, price, quantity, category, city, total_value, price_tier]
+      dedupe: [id]
+      sort: "total_value desc"
+      limit: 50000
+
+  - load:
+      target: sqlite:///bench_output.db
+      table: products
+      mode: replace
+      batch_size: 5000
