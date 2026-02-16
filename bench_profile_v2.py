@@ -10,7 +10,7 @@ try:
 except ImportError:
     HAS_ORJSON = False
 
-from blitz.native.expr_engine import (
+from blitztigerclaw.native.expr_engine import (
     compile_expr as native_compile,
     eval_filter, eval_compute,
     native_select, native_dedupe, native_sort,
@@ -58,7 +58,7 @@ def main():
     print("--- Phase 1: Filter ---")
 
     # Python
-    from blitz.utils.expr import _compile_python
+    from blitztigerclaw.utils.expr import _compile_python
     py_filter = _compile_python(FILTER_EXPR)
     _, dt = timeit("py", lambda d: [r for r in d if py_filter(r)], data)
     py_filtered = [r for r in data if py_filter(r)]

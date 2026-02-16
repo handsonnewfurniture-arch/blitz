@@ -1,10 +1,10 @@
-# BLITZ
+# BLITZTIGERCLAW
 
 ### 100x Efficiency Data Automation Framework
 
 **Write 8 lines of YAML. Get optimized, parallel, production-grade data pipelines.**
 
-Blitz replaces hundreds of lines of Python with simple declarative YAML — then executes it with async parallelism, batched writes, connection pooling, and retry logic. Built with Toyota Production System principles for quality, efficiency, and zero waste.
+BlitzTigerClaw replaces hundreds of lines of Python with simple declarative YAML — then executes it with async parallelism, batched writes, connection pooling, and retry logic. Built with Toyota Production System principles for quality, efficiency, and zero waste.
 
 ---
 
@@ -34,7 +34,7 @@ conn.commit()
 # ~100 seconds, ~150 lines, no retry, no error handling
 ```
 
-## The Blitz Way
+## The BlitzTigerClaw Way
 
 ```yaml
 name: scrape_and_store
@@ -54,7 +54,7 @@ steps:
 ```
 
 ```
-$ blitz run pipeline.yaml
+$ blitztigerclaw run pipeline.yaml
 
 --- Pipeline Complete ---
 Rows: 8547
@@ -78,10 +78,10 @@ cd blitz
 pip install -e .
 
 # Create a starter pipeline
-blitz init
+blitztigerclaw init
 
 # Run it
-blitz run pipeline.yaml
+blitztigerclaw run pipeline.yaml
 ```
 
 ---
@@ -97,7 +97,7 @@ YAML Pipeline  -->  Parser  -->  Optimizer  -->  Async Engine  -->  Results
                               - load? batched writes
 ```
 
-Every step is auto-optimized. You declare **what** you want. Blitz figures out **how** to do it fast.
+Every step is auto-optimized. You declare **what** you want. BlitzTigerClaw figures out **how** to do it fast.
 
 ---
 
@@ -218,7 +218,7 @@ Every step is auto-optimized. You declare **what** you want. Blitz figures out *
 
 ## Toyota Production System
 
-Blitz is built on TPS — the manufacturing principles that made Toyota the most efficient automaker in the world. Every pipeline run benefits from these principles automatically.
+BlitzTigerClaw is built on TPS — the manufacturing principles that made Toyota the most efficient automaker in the world. Every pipeline run benefits from these principles automatically.
 
 ### KANBAN — Visual Workflow
 
@@ -226,12 +226,12 @@ Queue pipelines and process them with pull-based execution.
 
 ```bash
 # Queue work
-blitz queue etl_pipeline.yaml
-blitz queue sync_pipeline.yaml
-blitz queue report_pipeline.yaml
+blitztigerclaw queue etl_pipeline.yaml
+blitztigerclaw queue sync_pipeline.yaml
+blitztigerclaw queue report_pipeline.yaml
 
 # View the board
-blitz board
+blitztigerclaw board
 
   KANBAN Board
   ===========================================================================
@@ -240,7 +240,7 @@ blitz board
   report_pipeline    sync_pipeline      etl_pipeline
 
 # Pull and execute next item
-blitz work
+blitztigerclaw work
 ```
 
 ### JIT — Just-In-Time Processing
@@ -264,12 +264,12 @@ steps:
 ```
 
 ```
-$ blitz run pipeline.yaml --verbose     # First run: full execution
+$ blitztigerclaw run pipeline.yaml --verbose     # First run: full execution
   fetch... 100 rows in 450ms
   transform... 100 rows in 1ms
   load... 100 rows in 15ms
 
-$ blitz run pipeline.yaml --verbose     # Second run: JIT detects no change
+$ blitztigerclaw run pipeline.yaml --verbose     # Second run: JIT detects no change
   fetch... (JIT: unchanged, skipping) 100 rows in 200ms
   transform... (JIT: unchanged, skipping) 100 rows in 0ms
   load... 100 rows in 12ms
@@ -281,7 +281,7 @@ $ blitz run pipeline.yaml --verbose     # Second run: JIT detects no change
 Every run is tracked. Bottlenecks are auto-detected with optimization suggestions.
 
 ```bash
-$ blitz metrics
+$ blitztigerclaw metrics
 
   KAIZEN Dashboard
   ======================================================================
@@ -291,7 +291,7 @@ $ blitz metrics
   api_etl                        8    8    0    285.0       10
   platform_status                5    5    0    811.3        4
 
-$ blitz metrics -p scrape_and_store
+$ blitztigerclaw metrics -p scrape_and_store
 
   Bottleneck Analysis:
   --------------------------------------------------
@@ -335,7 +335,7 @@ If the guard detects bad data, schema violations, or row counts that deviate 50%
 Static analysis catches mistakes before execution:
 
 ```bash
-$ blitz lint pipeline.yaml
+$ blitztigerclaw lint pipeline.yaml
 
   [ERR] (POKA-YOKE) step 1: Unknown step type 'fecth'. Available: fetch, ...
   [TIP] (JIDOKA) step 2: Consider adding a 'guard' step between 'fetch' and 'load'
@@ -373,7 +373,7 @@ urls: "https://api.com/{users,posts,comments}"  # 3 URLs
 
 ### CLI Overrides
 ```bash
-blitz run pipeline.yaml -v api_key=sk-123 -v limit=50
+blitztigerclaw run pipeline.yaml -v api_key=sk-123 -v limit=50
 ```
 
 ---
@@ -381,15 +381,15 @@ blitz run pipeline.yaml -v api_key=sk-123 -v limit=50
 ## Python API
 
 ```python
-import blitz
+import blitztigerclaw
 
 # Synchronous
-result = blitz.run_sync("pipeline.yaml", api_key="sk-123")
+result = blitztigerclaw.run_sync("pipeline.yaml", api_key="sk-123")
 print(result.data)           # List of row dicts
 print(result.summary())      # Timing and row counts
 
 # Async
-result = await blitz.run("pipeline.yaml")
+result = await blitztigerclaw.run("pipeline.yaml")
 ```
 
 ---
@@ -397,21 +397,21 @@ result = await blitz.run("pipeline.yaml")
 ## CLI Reference
 
 ```
-blitz run <file>             Execute a pipeline
+blitztigerclaw run <file>             Execute a pipeline
   --verbose                  Show step-by-step progress
   --dry-run                  Parse and validate only
   -v key=value               Override pipeline variables
 
-blitz validate <file>        Validate YAML without executing
-blitz init                   Create starter pipeline.yaml
-blitz lint <file>            Static analysis (POKA-YOKE)
+blitztigerclaw validate <file>        Validate YAML without executing
+blitztigerclaw init                   Create starter pipeline.yaml
+blitztigerclaw lint <file>            Static analysis (POKA-YOKE)
 
-blitz metrics                Performance dashboard (KAIZEN)
+blitztigerclaw metrics                Performance dashboard (KAIZEN)
   -p <name>                  Detailed bottleneck analysis
 
-blitz board                  View Kanban board
-blitz queue <file>           Add pipeline to backlog
-blitz work                   Pull and execute from queue
+blitztigerclaw board                  View Kanban board
+blitztigerclaw queue <file>           Add pipeline to backlog
+blitztigerclaw work                   Pull and execute from queue
   -n <count>                 Process N items then stop
 ```
 
@@ -419,7 +419,7 @@ blitz work                   Pull and execute from queue
 
 ## Performance
 
-| Operation | Naive Python | Blitz | Speedup |
+| Operation | Naive Python | BlitzTigerClaw | Speedup |
 |---|---|---|---|
 | Fetch 100 API pages | Sequential, ~100s | 20 concurrent async, ~5s | **20x** |
 | Insert 10k rows to SQLite | One at a time, ~10s | Batched executemany, ~0.1s | **100x** |
@@ -432,7 +432,7 @@ blitz work                   Pull and execute from queue
 ## Architecture
 
 ```
-blitz/
+blitztigerclaw/
   __init__.py           Public API: run(), run_sync()
   cli.py                CLI entry point (8 commands)
   cli_tps.py            TPS commands (metrics, board, lint, queue, work)

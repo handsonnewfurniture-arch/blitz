@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "blitz-framework"
+name = "blitztigerclaw-framework"
 version = "0.2.0"
 description = "100x efficiency data automation framework"
 requires-python = ">=3.10"
@@ -22,7 +22,7 @@ dev = ["pytest>=7.0", "pytest-asyncio>=0.23"]
 all = ["orjson>=3.9", "beautifulsoup4>=4.12", "lxml>=4.9"]
 
 [project.scripts]
-blitz = "blitz.cli:cli"
+blitztigerclaw = "blitztigerclaw.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]
