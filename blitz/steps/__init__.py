@@ -1,9 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, AsyncIterator
 
 
 class BaseStep(ABC):
-    """Base class for all pipeline steps."""
+    """Base class for all pipeline steps.
+
+    v0.2.0: Added streaming interface (execute_stream / supports_streaming).
+    Steps that support streaming can process data row-by-row without
+    materializing the full dataset in memory.
+    """
 
     def __init__(self, config: dict[str, Any], context: "Context"):
         self.config = config
@@ -19,6 +24,23 @@ class BaseStep(ABC):
 
     async def execute_pooled(self) -> list[dict[str, Any]]:
         return await self.execute()
+
+    async def execute_stream(self) -> AsyncIterator[dict[str, Any]]:
+        """Streaming execution: yields rows one at a time.
+
+        Default implementation falls back to execute() and yields from result.
+        Override in subclasses for true streaming behavior.
+        """
+        result = await self.execute()
+        for item in result:
+            yield item
+
+    def supports_streaming(self) -> bool:
+        """Whether this step supports streaming execution.
+
+        Override to return True in steps that implement execute_stream natively.
+        """
+        return False
 
 
 class StepRegistry:

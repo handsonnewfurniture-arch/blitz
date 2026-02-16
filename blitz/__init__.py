@@ -1,6 +1,6 @@
 """Blitz — 100x efficiency data automation framework."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from blitz.parser import parse_pipeline
 from blitz.pipeline import Pipeline

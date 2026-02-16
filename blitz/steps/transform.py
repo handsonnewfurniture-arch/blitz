@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, AsyncIterator
 
 from blitz.steps import BaseStep, StepRegistry
 from blitz.utils.expr import compile_expr
@@ -9,7 +9,11 @@ from blitz.utils.jsonpath import jsonpath_extract
 
 @StepRegistry.register("transform")
 class TransformStep(BaseStep):
-    """Data transformation: flatten, select, rename, filter, sort, dedupe, compute, limit."""
+    """Data transformation: flatten, select, rename, filter, sort, dedupe, compute, limit.
+
+    v0.2.0: Streaming support for row-level operations (select, rename, filter, compute).
+    Automatically collects only when sort/dedupe/limit is needed.
+    """
 
     async def execute(self) -> list[dict[str, Any]]:
         data = list(self.context.data)
@@ -72,6 +76,75 @@ class TransformStep(BaseStep):
             data = data[: self.config["limit"]]
 
         return data
+
+    async def execute_stream(self) -> AsyncIterator[dict[str, Any]]:
+        """Streaming transform: applies row-level ops without materializing.
+
+        Row-level ops (select, rename, filter, compute, flatten) stream through.
+        Collection ops (sort, dedupe, limit) force materialization.
+        """
+        needs_collect = any(
+            k in self.config for k in ("sort", "dedupe", "limit")
+        )
+
+        if needs_collect:
+            # Fall back to batch execution for operations that need full dataset
+            result = await self.execute()
+            for item in result:
+                yield item
+            return
+
+        # Stream row-level operations
+        select_fields = self.config.get("select")
+        rename_map = self.config.get("rename")
+        filter_expr = compile_expr(self.config["filter"]) if "filter" in self.config else None
+        compute_exprs = {}
+        if "compute" in self.config:
+            for field_name, expression in self.config["compute"].items():
+                compute_exprs[field_name] = compile_expr(expression)
+
+        flatten_path = self.config.get("flatten")
+
+        for row in self.context.data:
+            # Flatten
+            if flatten_path:
+                extracted = jsonpath_extract(row, flatten_path)
+                if isinstance(extracted, list):
+                    rows = [
+                        item if isinstance(item, dict) else {"value": item}
+                        for item in extracted
+                    ]
+                elif isinstance(extracted, dict):
+                    rows = [extracted]
+                elif extracted is not None:
+                    rows = [{"value": extracted}]
+                else:
+                    rows = []
+            else:
+                rows = [row]
+
+            for r in rows:
+                # Select
+                if select_fields:
+                    r = {k: r.get(k) for k in select_fields}
+
+                # Rename
+                if rename_map:
+                    r = {rename_map.get(k, k): v for k, v in r.items()}
+
+                # Filter
+                if filter_expr and not filter_expr(r):
+                    continue
+
+                # Compute
+                for field_name, expr in compute_exprs.items():
+                    r[field_name] = expr(r)
+
+                yield r
+
+    def supports_streaming(self) -> bool:
+        # Streaming only when no collection ops needed
+        return not any(k in self.config for k in ("sort", "dedupe", "limit"))
 
     def _flatten(self, data: list[dict], path: str) -> list[dict]:
         """Extract nested data from each row using JSONPath and flatten into a list."""

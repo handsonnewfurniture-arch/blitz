@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from blitz.context import Context
 from blitz.optimizer import Optimizer
 from blitz.exceptions import StepError
+from blitz.checkpoint import CheckpointManager
 
 if TYPE_CHECKING:
     from blitz.parser import PipelineDefinition
@@ -21,6 +22,7 @@ import blitz.steps.guard
 import blitz.steps.railway
 import blitz.steps.netlify
 import blitz.steps.github
+import blitz.steps.parallel
 
 from blitz.steps import StepRegistry
 from blitz.tps.metrics import MetricsStore
@@ -36,6 +38,9 @@ class Pipeline:
     - KANBAN: Tracks pipeline state on board
     - JIT: Skips steps when data unchanged
     - MUDA: Warns on dead/wasteful steps
+
+    v0.2.0: Dual execution path (sequential + streaming),
+    checkpoint/resume support, memory tracking.
     """
 
     def __init__(
@@ -43,6 +48,7 @@ class Pipeline:
         definition: "PipelineDefinition",
         verbose: bool = False,
         kanban_id: str | None = None,
+        resume: bool = False,
     ):
         self.definition = definition
         self.verbose = verbose
@@ -51,6 +57,12 @@ class Pipeline:
         self.change_detector = ChangeDetector()
         self.kanban_id = kanban_id
         self.kanban = KanbanBoard()
+        self.resume = resume
+        self.checkpoint = (
+            CheckpointManager(definition.name)
+            if definition.checkpoint or resume
+            else None
+        )
 
     async def run(self) -> Context:
         context = Context(
@@ -58,6 +70,13 @@ class Pipeline:
             pipeline_name=self.definition.name,
         )
         context.vars["_pipeline_name"] = self.definition.name
+
+        # Check for streaming eligibility
+        step_configs = [
+            (s.step_type, s.config) for s in self.definition.steps
+        ]
+        use_streaming = self.optimizer.should_stream_pipeline(step_configs)
+        context.streaming_mode = use_streaming
 
         started_at = time.time()
         status = "completed"
@@ -67,71 +86,33 @@ class Pipeline:
         if self.kanban_id:
             self.kanban.update_state(self.kanban_id, "in_progress")
 
-        try:
-            for i, step_def in enumerate(self.definition.steps):
-                step_name = step_def.step_type
+        # Resume from checkpoint if available
+        start_step = 0
+        if self.resume and self.checkpoint:
+            saved = self.checkpoint.load()
+            if saved is not None:
+                start_step = saved["completed_step"] + 1
+                context.set_data(saved["data"])
+                context.vars.update(saved.get("vars", {}))
+                for r in saved.get("results", []):
+                    context.log_step(
+                        r.get("step_index", 0),
+                        r.get("step_type", "unknown"),
+                        r.get("row_count", 0),
+                        r.get("duration_ms", 0),
+                        r.get("errors", []),
+                    )
                 if self.verbose:
                     print(
-                        f"  [{i + 1}/{len(self.definition.steps)}] {step_name}...",
-                        end=" ",
-                        flush=True,
+                        f"  Resuming from step {start_step + 1} "
+                        f"({len(context.data)} rows from checkpoint)"
                     )
 
-                step_class = StepRegistry.get(step_name)
-                step = step_class(step_def.config, context)
-
-                strategy = self.optimizer.decide(step_name, step_def.config, context)
-
-                start = time.time()
-                errors = []
-
-                try:
-                    if strategy == "async":
-                        result = await step.execute_async()
-                    elif strategy == "multiprocess":
-                        result = await step.execute_pooled()
-                    else:
-                        result = await step.execute()
-                except Exception as e:
-                    if self.definition.on_error == "stop":
-                        raise StepError(step_name, str(e)) from e
-                    elif self.definition.on_error == "skip":
-                        errors.append(str(e))
-                        result = context.data
-                    else:
-                        raise StepError(step_name, str(e)) from e
-
-                duration_ms = (time.time() - start) * 1000
-
-                # JIT: Check if data changed (skip downstream if unchanged)
-                jit_skipped = False
-                if self.definition.jit and step_name not in ("guard", "load"):
-                    current_hash = self.change_detector.compute_hash(result)
-                    if not self.change_detector.has_changed(
-                        self.definition.name, i, current_hash
-                    ):
-                        jit_skipped = True
-                        context.jit_steps_skipped += 1
-                        if self.verbose:
-                            print(f"(JIT: unchanged, skipping) ", end="")
-                    else:
-                        self.change_detector.save_hash(
-                            self.definition.name, i, current_hash
-                        )
-
-                # MUDA: Warn on dead steps (no data produced)
-                if (
-                    not result
-                    and step_name not in ("guard", "load")
-                    and self.verbose
-                ):
-                    print(f"(MUDA: no data) ", end="")
-
-                context.set_data(result)
-                context.log_step(i, step_name, len(result), duration_ms, errors)
-
-                if self.verbose:
-                    print(f"{len(result)} rows in {duration_ms:.0f}ms")
+        try:
+            if use_streaming and start_step == 0:
+                await self._run_streaming(context)
+            else:
+                await self._run_sequential(context, start_step)
 
         except Exception as e:
             status = "failed"
@@ -163,9 +144,16 @@ class Pipeline:
                         }
                         for r in context.results
                     ],
+                    memory_peak_mb=context.memory_peak_mb,
+                    peak_buffer_rows=context.peak_buffer_rows,
                 )
             except Exception:
                 pass  # Don't fail pipeline if metrics recording fails
+            finally:
+                try:
+                    await self.metrics.close()
+                except Exception:
+                    pass
 
             # KANBAN: Update state
             if self.kanban_id:
@@ -177,4 +165,174 @@ class Pipeline:
                     summary=context.summary(),
                 )
 
+            # Clear checkpoint on success
+            if status == "completed" and self.checkpoint:
+                self.checkpoint.clear()
+
         return context
+
+    async def _run_sequential(self, context: Context, start_step: int = 0):
+        """Standard step-by-step execution."""
+        for i, step_def in enumerate(self.definition.steps):
+            if i < start_step:
+                continue
+
+            step_name = step_def.step_type
+            if self.verbose:
+                print(
+                    f"  [{i + 1}/{len(self.definition.steps)}] {step_name}...",
+                    end=" ",
+                    flush=True,
+                )
+
+            step_class = StepRegistry.get(step_name)
+            step = step_class(step_def.config, context)
+
+            strategy = self.optimizer.decide(step_name, step_def.config, context)
+
+            start = time.time()
+            errors = []
+
+            try:
+                if strategy == "streaming" and step.supports_streaming():
+                    result = []
+                    async for row in step.execute_stream():
+                        result.append(row)
+                elif strategy == "async":
+                    result = await step.execute_async()
+                elif strategy == "multiprocess":
+                    result = await step.execute_pooled()
+                else:
+                    result = await step.execute()
+            except Exception as e:
+                # Save checkpoint on failure
+                if self.checkpoint and self.definition.checkpoint:
+                    self.checkpoint.save(
+                        step_index=i - 1 if i > 0 else 0,
+                        data=context.data,
+                        vars=context.vars,
+                        results=[
+                            {
+                                "step_index": r.step_index,
+                                "step_type": r.step_type,
+                                "row_count": r.row_count,
+                                "duration_ms": r.duration_ms,
+                                "errors": r.errors,
+                            }
+                            for r in context.results
+                        ],
+                    )
+
+                if self.definition.on_error == "stop":
+                    raise StepError(step_name, str(e)) from e
+                elif self.definition.on_error == "skip":
+                    errors.append(str(e))
+                    result = context.data
+                else:
+                    raise StepError(step_name, str(e)) from e
+
+            duration_ms = (time.time() - start) * 1000
+
+            # JIT: Check if data changed (skip downstream if unchanged)
+            jit_skipped = False
+            if self.definition.jit and step_name not in ("guard", "load"):
+                current_hash = self.change_detector.compute_hash(result)
+                if not self.change_detector.has_changed(
+                    self.definition.name, i, current_hash
+                ):
+                    jit_skipped = True
+                    context.jit_steps_skipped += 1
+                    if self.verbose:
+                        print(f"(JIT: unchanged, skipping) ", end="")
+                else:
+                    self.change_detector.save_hash(
+                        self.definition.name, i, current_hash
+                    )
+
+            # MUDA: Warn on dead steps (no data produced)
+            if (
+                not result
+                and step_name not in ("guard", "load")
+                and self.verbose
+            ):
+                print(f"(MUDA: no data) ", end="")
+
+            context.set_data(result)
+            context.log_step(i, step_name, len(result), duration_ms, errors)
+
+            # Save checkpoint after each successful step
+            if self.checkpoint and self.definition.checkpoint:
+                self.checkpoint.save(
+                    step_index=i,
+                    data=context.data,
+                    vars=context.vars,
+                    results=[
+                        {
+                            "step_index": r.step_index,
+                            "step_type": r.step_type,
+                            "row_count": r.row_count,
+                            "duration_ms": r.duration_ms,
+                            "errors": r.errors,
+                        }
+                        for r in context.results
+                    ],
+                )
+
+            if self.verbose:
+                print(f"{len(result)} rows in {duration_ms:.0f}ms")
+
+    async def _run_streaming(self, context: Context):
+        """Streaming pipeline execution — data flows step-by-step without full materialization.
+
+        Each step processes rows as they arrive from the previous step.
+        Falls back to sequential for steps that don't support streaming.
+        """
+        if self.verbose:
+            print("  [STREAMING MODE]")
+
+        # Execute first step normally to seed the pipeline
+        first_step_def = self.definition.steps[0]
+        step_class = StepRegistry.get(first_step_def.step_type)
+        step = step_class(first_step_def.config, context)
+
+        start = time.time()
+        result = await step.execute_async()
+        duration_ms = (time.time() - start) * 1000
+        context.set_data(result)
+        context.log_step(0, first_step_def.step_type, len(result), duration_ms, [])
+
+        if self.verbose:
+            print(
+                f"  [1/{len(self.definition.steps)}] "
+                f"{first_step_def.step_type}... {len(result)} rows in {duration_ms:.0f}ms"
+            )
+
+        # Stream remaining steps
+        for i, step_def in enumerate(self.definition.steps[1:], start=1):
+            step_name = step_def.step_type
+            if self.verbose:
+                print(
+                    f"  [{i + 1}/{len(self.definition.steps)}] {step_name} (streaming)...",
+                    end=" ",
+                    flush=True,
+                )
+
+            step_class = StepRegistry.get(step_name)
+            step = step_class(step_def.config, context)
+
+            start = time.time()
+
+            if step.supports_streaming():
+                collected = []
+                async for row in step.execute_stream():
+                    collected.append(row)
+                result = collected
+            else:
+                result = await step.execute()
+
+            duration_ms = (time.time() - start) * 1000
+            context.set_data(result)
+            context.log_step(i, step_name, len(result), duration_ms, [])
+
+            if self.verbose:
+                print(f"{len(result)} rows in {duration_ms:.0f}ms")

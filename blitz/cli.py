@@ -19,7 +19,8 @@ def cli():
 @click.option("--var", "-v", multiple=True, help="Override variable: key=value")
 @click.option("--dry-run", is_flag=True, help="Parse and validate only")
 @click.option("--verbose", is_flag=True, help="Show detailed execution info")
-def run(file, var, dry_run, verbose):
+@click.option("--resume", is_flag=True, help="Resume from last checkpoint")
+def run(file, var, dry_run, verbose, resume):
     """Execute a Blitz pipeline from a YAML file."""
     overrides = {}
     for v in var:
@@ -39,25 +40,35 @@ def run(file, var, dry_run, verbose):
         click.echo(f"Steps ({len(definition.steps)}):")
         for i, step in enumerate(definition.steps):
             click.echo(f"  {i + 1}. {step.step_type}")
+        if definition.checkpoint:
+            click.echo(f"Checkpoint: enabled")
         click.echo("Validation: OK")
         return
 
     click.echo(f"Running pipeline: {definition.name}")
     if verbose:
         click.echo(f"Steps: {len(definition.steps)}")
+        if definition.checkpoint:
+            click.echo(f"Checkpoint: enabled")
 
-    pipeline = Pipeline(definition, verbose=verbose)
+    pipeline = Pipeline(definition, verbose=verbose, resume=resume)
 
     try:
         context = asyncio.run(pipeline.run())
     except BlitzError as e:
         click.echo(f"\nError: {e}", err=True)
+        if definition.checkpoint:
+            click.echo(f"  Checkpoint saved. Resume with: blitz run {file} --resume")
         raise SystemExit(1)
 
     summary = context.summary()
     click.echo(f"\n--- Pipeline Complete ---")
     click.echo(f"Rows: {summary['total_rows']}")
     click.echo(f"Duration: {summary['total_duration_ms']:.0f}ms")
+    if summary.get("memory_peak_mb", 0) > 0:
+        click.echo(f"Memory peak: {summary['memory_peak_mb']:.1f}MB")
+    if summary.get("streaming_mode"):
+        click.echo(f"Mode: streaming")
     for s in summary["steps"]:
         errors_str = f" ({s['errors']} errors)" if s["errors"] else ""
         click.echo(f"  {s['type']}: {s['rows']} rows in {s['ms']}ms{errors_str}")

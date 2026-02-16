@@ -22,6 +22,8 @@ class PipelineDefinition(BaseModel):
     on_error: str = "stop"
     plugins: list[str] = Field(default_factory=list)
     jit: bool = False
+    # v0.2.0: Checkpoint support
+    checkpoint: bool = False
 
 
 def parse_pipeline(
@@ -84,6 +86,7 @@ def parse_pipeline(
         on_error=raw.get("on_error", "stop"),
         plugins=raw.get("plugins", []),
         jit=raw.get("jit", False),
+        checkpoint=raw.get("checkpoint", False),
     )
 
 

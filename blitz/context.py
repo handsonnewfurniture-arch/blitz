@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Any
+import sys
 import time
 
 
@@ -14,7 +15,10 @@ class StepResult:
 
 @dataclass
 class Context:
-    """Shared runtime context that flows data between pipeline steps."""
+    """Shared runtime context that flows data between pipeline steps.
+
+    v0.2.0: Added memory tracking (memory_mb, peak_buffer_rows).
+    """
 
     data: list[dict[str, Any]] = field(default_factory=list)
     vars: dict[str, Any] = field(default_factory=dict)
@@ -22,9 +26,14 @@ class Context:
     _start_time: float = field(default_factory=time.time)
     pipeline_name: str = ""
     jit_steps_skipped: int = 0
+    # v0.2.0: Memory tracking
+    memory_peak_mb: float = 0.0
+    peak_buffer_rows: int = 0
+    streaming_mode: bool = False
 
     def set_data(self, data: list[dict[str, Any]]):
         self.data = data
+        self._track_memory()
 
     def elapsed_ms(self) -> float:
         return (time.time() - self._start_time) * 1000
@@ -39,11 +48,29 @@ class Context:
             errors=errors or [],
         ))
 
+    def _track_memory(self):
+        """Track peak memory usage of the data list."""
+        current_mb = sys.getsizeof(self.data) / (1024 * 1024)
+        # Rough estimate: each row ~200 bytes average
+        if self.data:
+            sample_size = min(100, len(self.data))
+            avg_row_size = sum(
+                sys.getsizeof(row) for row in self.data[:sample_size]
+            ) / sample_size
+            current_mb = (avg_row_size * len(self.data)) / (1024 * 1024)
+        if current_mb > self.memory_peak_mb:
+            self.memory_peak_mb = current_mb
+        if len(self.data) > self.peak_buffer_rows:
+            self.peak_buffer_rows = len(self.data)
+
     def summary(self) -> dict:
         result = {
             "total_rows": len(self.data),
             "steps_completed": len(self.results),
             "total_duration_ms": self.elapsed_ms(),
+            "memory_peak_mb": round(self.memory_peak_mb, 2),
+            "peak_buffer_rows": self.peak_buffer_rows,
+            "streaming_mode": self.streaming_mode,
             "steps": [
                 {
                     "type": r.step_type,
