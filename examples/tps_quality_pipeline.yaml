@@ -1,0 +1,29 @@
+name: quality_checked_etl
+description: JIDOKA + POKA-YOKE - ETL with quality gates
+
+steps:
+  # Fetch data from API
+  - fetch:
+      url: "https://jsonplaceholder.typicode.com/users"
+
+  # JIDOKA: Quality gate - validate data before processing
+  - guard:
+      schema:
+        id: int
+        name: str
+        email: str
+      required: [id, name, email]
+      expect_rows: "5..50"
+      expect_no_nulls: [id]
+      andon: true
+
+  # Transform: select and sort
+  - transform:
+      select: [id, name, email, phone]
+      compute:
+        name_upper: "name.upper()"
+      sort: "name"
+
+  # Output results
+  - load:
+      target: stdout

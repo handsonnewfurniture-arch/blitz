@@ -1,0 +1,15 @@
+name: platform_status_check
+description: Production line - check all platform statuses
+
+steps:
+  # Check GitHub notifications
+  - github:
+      action: repo_info
+
+  # Quality gate
+  - guard:
+      expect_rows: "1..100"
+
+  # Display results
+  - load:
+      target: stdout

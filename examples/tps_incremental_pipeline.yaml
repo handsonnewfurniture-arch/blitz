@@ -1,0 +1,23 @@
+name: incremental_sync
+description: JIT - Only process when data changes
+
+jit: true
+
+steps:
+  # Fetch posts
+  - fetch:
+      url: "https://jsonplaceholder.typicode.com/posts"
+
+  # Quality gate
+  - guard:
+      expect_rows: "1..200"
+
+  # Transform
+  - transform:
+      select: [id, userId, title]
+      dedupe: [id]
+      limit: 20
+
+  # Output
+  - load:
+      target: stdout

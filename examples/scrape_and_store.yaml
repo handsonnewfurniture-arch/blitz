@@ -1,0 +1,21 @@
+name: scrape_and_store
+description: Fetch paginated API data, transform, and store in SQLite
+
+steps:
+  - fetch:
+      urls: "https://jsonplaceholder.typicode.com/posts?_page={1..5}"
+      parallel: 5
+      retry: 2
+      timeout: 15
+
+  - transform:
+      select: [id, userId, title]
+      filter: "userId > 2"
+      sort: "id desc"
+      dedupe: [id]
+
+  - load:
+      target: sqlite:///output.db
+      table: posts
+      mode: upsert
+      key: id

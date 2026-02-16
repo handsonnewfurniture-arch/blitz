@@ -1,0 +1,16 @@
+name: api_etl
+description: Extract users from API, transform, and save to CSV
+
+steps:
+  - fetch:
+      url: "https://jsonplaceholder.typicode.com/users"
+      parallel: 1
+
+  - transform:
+      select: [id, name, email, phone]
+      compute:
+        name_upper: "name.upper()"
+      sort: "name"
+
+  - load:
+      target: csv://output_users.csv

@@ -1,0 +1,16 @@
+name: file_processing
+description: Read a JSON file, transform data, and display results
+
+steps:
+  - shell:
+      command: "echo '[{\"name\":\"Alice\",\"age\":30,\"city\":\"NYC\"},{\"name\":\"Bob\",\"age\":25,\"city\":\"LA\"},{\"name\":\"Charlie\",\"age\":35,\"city\":\"NYC\"},{\"name\":\"Diana\",\"age\":28,\"city\":\"Chicago\"},{\"name\":\"Eve\",\"age\":22,\"city\":\"LA\"}]'"
+      capture: json
+
+  - transform:
+      filter: "age > 24"
+      compute:
+        greeting: "name.upper()"
+      sort: "age desc"
+
+  - load:
+      target: stdout
