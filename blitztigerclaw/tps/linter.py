@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from blitztigerclaw.parser import parse_pipeline, PipelineDefinition
-from blitztigerclaw.steps import StepRegistry
+from blitztigerclaw.steps import StepRegistry, discover as _discover_steps
 
 
 @dataclass
@@ -23,15 +23,6 @@ class LintResult:
 
 class PipelineLinter:
     """Static analysis for pipeline YAML files."""
-
-    REQUIRED_CONFIGS: dict[str, list[str]] = {
-        "fetch": ["url", "urls"],
-        "load": ["target"],
-        "railway": ["action"],
-        "netlify": ["action"],
-        "github": ["action"],
-        "scrape": ["url", "urls"],
-    }
 
     def lint(self, file_path: str) -> list[LintResult]:
         """Run all checks and return findings."""
@@ -52,6 +43,7 @@ class PipelineLinter:
 
     def _check_step_types(self, definition: PipelineDefinition) -> list[LintResult]:
         """Warn on unregistered step types."""
+        _discover_steps()
         results = []
         available = StepRegistry.list_types()
         for i, step in enumerate(definition.steps):
@@ -121,21 +113,27 @@ class PipelineLinter:
     def _check_missing_required_config(
         self, definition: PipelineDefinition
     ) -> list[LintResult]:
-        """POKA-YOKE: Verify required config keys per step type."""
+        """POKA-YOKE: Verify required config keys per step type.
+
+        Reads StepMeta.required_config — no hardcoded dict.
+        """
+        _discover_steps()
         results = []
 
         for i, step in enumerate(definition.steps):
-            required_keys = self.REQUIRED_CONFIGS.get(step.step_type)
-            if required_keys is None:
+            try:
+                meta = StepRegistry.get_meta(step.step_type)
+            except ValueError:
+                continue  # Unknown type caught by _check_step_types
+            if not meta.required_config:
                 continue
 
-            # Check if at least one of the required keys exists
-            has_any = any(k in step.config for k in required_keys)
+            has_any = any(k in step.config for k in meta.required_config)
             if not has_any:
                 results.append(LintResult(
                     "error", i,
                     f"Step '{step.step_type}' requires at least one of: "
-                    f"{', '.join(required_keys)}",
+                    f"{', '.join(meta.required_config)}",
                     "POKA-YOKE",
                 ))
 

@@ -9,7 +9,7 @@ import asyncio
 import json
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 
 
 @StepRegistry.register("github")
@@ -23,6 +23,18 @@ class GitHubStep(BaseStep):
         state: open
         limit: 20
     """
+
+    meta = StepMeta(
+        is_source=True,
+        required_config=("action",),
+        description="GitHub API integration",
+        config_docs={
+            "action": "string — GitHub action to perform (notifications|issues|pr_list|repo_info|workflow_runs)",
+            "repo": "string — repository in owner/name format",
+            "state": "string — filter by state (default open)",
+            "limit": "int — max results to return (default 20)",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         action = self.config.get("action", "notifications")

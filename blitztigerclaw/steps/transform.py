@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 from blitztigerclaw.utils.expr import (
     compile_expr, NATIVE_AVAILABLE,
     native_eval_filter, native_eval_compute,
@@ -19,6 +19,25 @@ class TransformStep(BaseStep):
     Automatically collects only when sort/dedupe/limit is needed.
     Native C engine for filter/compute when available (~20-50x faster).
     """
+
+    meta = StepMeta(
+        default_strategy="sync",
+        strategy_escalations=((5_000, "streaming"), (50_000, "multiprocess")),
+        streaming_breakers=("sort", "dedupe", "limit"),
+        streaming="conditional",
+        fusable=True,
+        description="Data transformation: select, filter, compute, sort, dedupe, limit",
+        config_docs={
+            "select": "list[string] — keep only these fields",
+            "rename": "dict — rename fields {old: new}",
+            "filter": "string — expression to filter rows (e.g. 'value > 100')",
+            "compute": "dict — add computed fields {name: expression}",
+            "flatten": "string — JSONPath to extract nested data",
+            "sort": "string — sort by field (e.g. 'value desc')",
+            "dedupe": "list[string] — deduplicate by these keys",
+            "limit": "int — keep first N rows",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         data = list(self.context.data)

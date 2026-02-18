@@ -13,25 +13,9 @@ from blitztigerclaw.checkpoint import CheckpointManager
 if TYPE_CHECKING:
     from blitztigerclaw.parser import PipelineDefinition
 
-# Import step modules to trigger registration
-import blitztigerclaw.steps.fetch
-import blitztigerclaw.steps.transform
-import blitztigerclaw.steps.load
-import blitztigerclaw.steps.scrape
-import blitztigerclaw.steps.shell
-import blitztigerclaw.steps.file
-import blitztigerclaw.steps.guard
-import blitztigerclaw.steps.railway
-import blitztigerclaw.steps.netlify
-import blitztigerclaw.steps.github
-import blitztigerclaw.steps.parallel
-import blitztigerclaw.steps.aggregate
-import blitztigerclaw.steps.cache
-import blitztigerclaw.steps.clean
-import blitztigerclaw.steps.branch
-import blitztigerclaw.steps.join
+from blitztigerclaw.steps import StepRegistry, discover as _discover_steps
 
-from blitztigerclaw.steps import StepRegistry
+_discover_steps()
 from blitztigerclaw.tps.metrics import MetricsStore
 from blitztigerclaw.tps.kanban import KanbanBoard
 from blitztigerclaw.tps.change_detector import ChangeDetector

@@ -1,5 +1,36 @@
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator
+from dataclasses import dataclass, field
+from typing import Any, AsyncIterator, ClassVar
+
+import importlib
+import pkgutil
+
+
+@dataclass(frozen=True)
+class StepMeta:
+    """Declarative metadata for a pipeline step.
+
+    Each step class sets ``meta = StepMeta(...)`` so the framework can
+    read optimizer hints, docs, fusion eligibility, and linting rules
+    generically — no hardcoded step names anywhere else.
+    """
+
+    # -- Optimizer --
+    default_strategy: str = "sync"  # sync|async|streaming|multiprocess|batched
+    strategy_escalations: tuple[tuple[int, str], ...] = ()  # [(5000, "streaming"), ...]
+    streaming_breakers: tuple[str, ...] = ()  # config keys that disable streaming
+    streaming: str = "no"  # yes|no|conditional
+
+    # -- Planner --
+    fusable: bool = False  # can participate in operator fusion
+    is_source: bool = False  # data source (no input dependency)
+
+    # -- Docs --
+    description: str = ""
+    config_docs: dict[str, str] = field(default_factory=dict)
+
+    # -- Linting --
+    required_config: tuple[str, ...] = ()  # at least one must be present
 
 
 class BaseStep(ABC):
@@ -8,7 +39,10 @@ class BaseStep(ABC):
     v0.2.0: Added streaming interface (execute_stream / supports_streaming).
     v0.4.0: Added schema declarations (input_schema / output_schema) for
     typed DAG execution and projection pushdown.
+    v0.5.0: Added ``meta`` class variable for self-describing steps.
     """
+
+    meta: ClassVar[StepMeta] = StepMeta()
 
     def __init__(self, config: dict[str, Any], context: "Context"):
         self.config = config
@@ -84,3 +118,52 @@ class StepRegistry:
     @classmethod
     def list_types(cls) -> list[str]:
         return sorted(cls._registry.keys())
+
+    @classmethod
+    def get_meta(cls, name: str) -> StepMeta:
+        """Return the StepMeta for a registered step type."""
+        return cls.get(name).meta
+
+    @classmethod
+    def all_meta(cls) -> dict[str, StepMeta]:
+        """Return {name: StepMeta} for every registered step."""
+        return {name: klass.meta for name, klass in sorted(cls._registry.items())}
+
+    @classmethod
+    def validate_all(cls) -> list[str]:
+        """Fitness check: ensure every step has description and config_docs.
+
+        Returns a list of error strings (empty = all good).
+        """
+        errors: list[str] = []
+        for name, klass in sorted(cls._registry.items()):
+            m = klass.meta
+            if not m.description:
+                errors.append(f"{name}: missing description")
+            if not m.config_docs:
+                errors.append(f"{name}: missing config_docs")
+        return errors
+
+
+# ---------------------------------------------------------------------------
+# Auto-discovery
+# ---------------------------------------------------------------------------
+
+_discovered = False
+
+
+def discover() -> None:
+    """Auto-import all step modules in this package to trigger registration.
+
+    Safe to call multiple times (idempotent).
+    """
+    global _discovered
+    if _discovered:
+        return
+    _discovered = True
+
+    package = importlib.import_module(__name__)
+    for info in pkgutil.iter_modules(package.__path__):
+        if info.name.startswith("_"):
+            continue
+        importlib.import_module(f"{__name__}.{info.name}")

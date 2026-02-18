@@ -12,12 +12,22 @@ try:
 except ImportError:
     _ORJSON = False
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 
 
 @StepRegistry.register("file")
 class FileStep(BaseStep):
     """Read files as pipeline input or write pipeline data to files."""
+
+    meta = StepMeta(
+        is_source=True,
+        description="File I/O: read JSON/CSV, glob patterns, write files",
+        config_docs={
+            "action": "string — 'read', 'write', or 'glob'",
+            "path": "string — file path or glob pattern",
+            "format": "string — 'json' or 'csv'",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         action = self.config.get("action", "read")

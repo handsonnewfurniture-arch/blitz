@@ -16,6 +16,7 @@ import re
 from typing import Any
 
 from blitztigerclaw.dag import ExecutionDAG, DagNode, DagEdge
+from blitztigerclaw.steps import StepRegistry, discover as _discover_steps
 
 
 class Planner:
@@ -85,6 +86,7 @@ class Planner:
 
     def optimize(self, dag: ExecutionDAG) -> ExecutionDAG:
         """Apply all optimization passes in order."""
+        _discover_steps()
         dag = self._pass_fuse_operators(dag)
         dag = self._pass_push_filters(dag)
         dag = self._pass_track_projections(dag)
@@ -96,7 +98,6 @@ class Planner:
     # Pass 1: Operator Fusion
     # ------------------------------------------------------------------
 
-    _FUSABLE_TYPES = frozenset({"transform", "clean"})
     _BREAKS_FUSION = frozenset({"sort", "dedupe", "limit"})
 
     def _pass_fuse_operators(self, dag: ExecutionDAG) -> ExecutionDAG:
@@ -155,17 +156,33 @@ class Planner:
         return dag
 
     def _is_fusable(self, node: DagNode) -> bool:
-        """Check if a node can participate in operator fusion."""
+        """Check if a node can participate in operator fusion.
+
+        Reads StepMeta.fusable — no hardcoded step type set.
+        """
         if node.step_type == "_fused":
-            return all(
-                op["type"] in self._FUSABLE_TYPES
-                and not any(k in op["config"] for k in self._BREAKS_FUSION)
-                for op in node.config.get("_fused_ops", [])
-            )
-        if node.step_type not in self._FUSABLE_TYPES:
+            # All constituent ops must themselves be fusable
+            for op in node.config.get("_fused_ops", []):
+                op_type = op["type"]
+                try:
+                    op_meta = StepRegistry.get_meta(op_type)
+                except ValueError:
+                    return False
+                if not op_meta.fusable:
+                    return False
+                if any(k in op["config"] for k in op_meta.streaming_breakers):
+                    return False
+            return True
+
+        try:
+            meta = StepRegistry.get_meta(node.step_type)
+        except ValueError:
             return False
-        if node.step_type == "transform" and any(
-            k in node.config for k in self._BREAKS_FUSION
+
+        if not meta.fusable:
+            return False
+        if meta.streaming_breakers and any(
+            k in node.config for k in meta.streaming_breakers
         ):
             return False
         return True
@@ -261,9 +278,14 @@ class Planner:
         return dag
 
     def _infer_field_needs(self, node: DagNode) -> set[str] | None:
-        """Return the set of input fields a node reads. None = all/unknown."""
+        """Return the set of input fields a node reads. None = all/unknown.
+
+        Reads StepMeta.is_source — source nodes need no input fields.
+        aggregate still has custom logic for group_by/functions introspection.
+        """
         c = node.config
 
+        # aggregate: introspect group_by + function arguments
         if node.step_type == "aggregate":
             needs: set[str] = set()
             gb = c.get("group_by", [])
@@ -276,11 +298,17 @@ class Planner:
                     needs.add(m.group(1))
             return needs
 
-        if node.step_type in ("fetch", "scrape", "shell", "file"):
-            return set()  # Source nodes
-
+        # Fused nodes are too complex to introspect
         if node.step_type == "_fused":
-            return None  # Complex — skip
+            return None
+
+        # Source nodes produce data — they don't read input fields
+        try:
+            meta = StepRegistry.get_meta(node.step_type)
+        except ValueError:
+            return None
+        if meta.is_source:
+            return set()
 
         return None  # Unknown
 
@@ -296,30 +324,27 @@ class Planner:
 
     @staticmethod
     def _decide_strategy(node: DagNode) -> str:
+        """Generic strategy selection via StepMeta — no hardcoded step names."""
         st = node.step_type
         est = node.estimated_rows or 0
 
-        if st in ("fetch", "scrape"):
-            return "async"
-        if st == "transform":
-            if est > 5_000 and not any(
-                k in node.config for k in ("sort", "dedupe", "limit")
-            ):
-                return "streaming"
-            if est > 50_000:
-                return "multiprocess"
-            return "sync"
-        if st == "clean":
-            return "streaming" if est > 5_000 else "sync"
-        if st == "aggregate":
-            return "multiprocess" if est > 50_000 else "sync"
-        if st in ("parallel", "branch"):
-            return "async"
-        if st == "load":
-            return "batched" if est > 10_000 else "sync"
         if st == "_fused":
             return "sync"
-        return "sync"
+
+        try:
+            meta = StepRegistry.get_meta(st)
+        except ValueError:
+            return "sync"
+
+        chosen = meta.default_strategy
+        for threshold, strategy in meta.strategy_escalations:
+            if est > threshold:
+                if strategy == "streaming" and meta.streaming_breakers:
+                    if any(k in node.config for k in meta.streaming_breakers):
+                        continue
+                chosen = strategy
+
+        return chosen
 
     # ------------------------------------------------------------------
     # Pass 5: Parallelism Detection

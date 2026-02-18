@@ -9,7 +9,7 @@ import asyncio
 import json
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 
 
 @StepRegistry.register("netlify")
@@ -23,6 +23,18 @@ class NetlifyStep(BaseStep):
         dir: ./dist
         prod: true
     """
+
+    meta = StepMeta(
+        is_source=True,
+        required_config=("action",),
+        description="Netlify integration",
+        config_docs={
+            "action": "string — Netlify action to perform (sites|status|deploy|logs)",
+            "site": "string — Netlify site name",
+            "dir": "string — deploy directory",
+            "prod": "bool — deploy to production (default false)",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         action = self.config.get("action", "sites")

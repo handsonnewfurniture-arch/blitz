@@ -4,7 +4,7 @@ import asyncio
 import aiohttp
 from typing import Any, AsyncIterator
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 from blitztigerclaw.utils.url_expander import expand_url_pattern
 from blitztigerclaw.utils.jsonpath import jsonpath_extract
 from blitztigerclaw.stream import AdaptiveSemaphore
@@ -17,6 +17,24 @@ class FetchStep(BaseStep):
     v0.2.0: HTTP compression, DNS caching, adaptive semaphore,
     streaming execution via execute_stream + as_completed.
     """
+
+    meta = StepMeta(
+        default_strategy="async",
+        streaming="yes",
+        is_source=True,
+        required_config=("url", "urls"),
+        description="Async HTTP fetching with parallel requests, retry, DNS caching",
+        config_docs={
+            "url": "string — single URL to fetch",
+            "urls": "list[string] — multiple URLs",
+            "parallel": "int — concurrent requests (default 10)",
+            "retry": "int — retry count on failure (default 0)",
+            "timeout": "int — request timeout in seconds (default 30)",
+            "headers": "dict — custom HTTP headers",
+            "method": "string — HTTP method (default GET)",
+            "extract": "string — JSONPath to extract from response",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         return await self.execute_async()

@@ -11,7 +11,7 @@ import json
 import os
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 
 
 @StepRegistry.register("join")
@@ -34,6 +34,20 @@ class JoinStep(BaseStep):
         right_on: customer_id
         how: inner
     """
+
+    meta = StepMeta(
+        description="Dataset merge/join — SQL-style JOIN on shared keys",
+        config_docs={
+            "right": "string — right-side source (sqlite:///path, csv:///path, json:///path, context:step_N)",
+            "right_table": "string — table name for SQLite source",
+            "on": "string — join key (same name both sides)",
+            "left_on": "string — left key (when names differ)",
+            "right_on": "string — right key (when names differ)",
+            "how": "string — inner | left | outer (default inner)",
+            "select_right": "list[string] — only keep these right-side fields",
+            "prefix_right": "string — prefix right-side fields to avoid collision",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         left_data = self.context.data

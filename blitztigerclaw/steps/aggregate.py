@@ -10,7 +10,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 from blitztigerclaw.utils.expr import compile_expr
 
 _AGG_RE = re.compile(r"^(sum|avg|min|max|count|count_distinct)\((\w+)\)$")
@@ -18,6 +18,17 @@ _AGG_RE = re.compile(r"^(sum|avg|min|max|count|count_distinct)\((\w+)\)$")
 
 @StepRegistry.register("aggregate")
 class AggregateStep(BaseStep):
+
+    meta = StepMeta(
+        strategy_escalations=((50_000, "multiprocess"),),
+        description="SQL-style GROUP BY + aggregation (sum, avg, min, max, count, count_distinct)",
+        config_docs={
+            "group_by": "list[string] — fields to group on (optional for global agg)",
+            "functions": "dict — {alias: 'func(field)'} e.g. {'total': 'sum(revenue)'}",
+            "having": "string — post-aggregation filter expression",
+            "sort": "string — sort results (e.g. 'total desc')",
+        },
+    )
     """GROUP BY + aggregation functions.
 
     YAML usage:

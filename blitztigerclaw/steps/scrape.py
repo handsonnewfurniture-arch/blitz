@@ -5,7 +5,7 @@ import re
 import aiohttp
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 from blitztigerclaw.utils.url_expander import expand_url_pattern
 
 
@@ -16,6 +16,19 @@ class ScrapeStep(BaseStep):
     Uses a lightweight built-in parser (no external deps required).
     For advanced selectors, install beautifulsoup4.
     """
+
+    meta = StepMeta(
+        default_strategy="async",
+        is_source=True,
+        required_config=("url", "urls"),
+        description="HTML scraping with CSS selectors",
+        config_docs={
+            "url": "string — URL to scrape",
+            "urls": "list[string] — multiple URLs",
+            "select": "dict — {field_name: css_selector}",
+            "parallel": "int — concurrent requests",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         return await self.execute_async()

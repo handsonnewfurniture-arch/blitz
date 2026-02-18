@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any, AsyncIterator
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 from blitztigerclaw.stream import BatchBuffer
 
 
@@ -16,6 +16,21 @@ class LoadStep(BaseStep):
     v0.2.0: SQLite WAL mode + PRAGMAs for 2-5x write performance,
     streaming batch inserts via execute_stream.
     """
+
+    meta = StepMeta(
+        default_strategy="sync",
+        strategy_escalations=((10_000, "batched"),),
+        streaming="conditional",
+        required_config=("target",),
+        description="Output data to SQLite, CSV, JSON, or stdout",
+        config_docs={
+            "target": "string — 'sqlite:///path.db', 'csv:///path.csv', 'json:///path.json', or 'stdout'",
+            "table": "string — table name for SQLite",
+            "mode": "string — 'insert', 'upsert', or 'replace' (SQLite)",
+            "key": "string — upsert key column",
+            "batch_size": "int — rows per batch insert (default 500)",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         target = self.config.get("target", "stdout")

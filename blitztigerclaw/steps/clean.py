@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 
 _TRUTHY = frozenset({"true", "1", "yes", "on", "t", "y"})
 _FALSY = frozenset({"false", "0", "no", "off", "f", "n"})
@@ -56,6 +56,24 @@ class CleanStep(BaseStep):
         drop_empty: [name]
         rename: {old_field: new_field}
     """
+
+    meta = StepMeta(
+        strategy_escalations=((5_000, "streaming"),),
+        streaming="yes",
+        fusable=True,
+        description="Data cleaning & type coercion — POKA-YOKE for data",
+        config_docs={
+            "coerce": "dict — type casting {field: int|float|bool|str}",
+            "defaults": "dict — fill missing/null values {field: default}",
+            "trim": "list[string] — strip whitespace from fields",
+            "lowercase": "list[string] — lowercase string fields",
+            "uppercase": "list[string] — uppercase string fields",
+            "replace": "dict — string replacement {field: {old: new}}",
+            "drop_nulls": "list[string] — drop rows where fields are null",
+            "drop_empty": "list[string] — drop rows where fields are empty",
+            "rename": "dict — rename fields {old: new}",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         data = list(self.context.data)

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 from blitztigerclaw.exceptions import QualityGateError, AndonAlert
 
 TYPE_MAP = {
@@ -23,6 +23,17 @@ TYPE_MAP = {
 
 @StepRegistry.register("guard")
 class GuardStep(BaseStep):
+
+    meta = StepMeta(
+        description="JIDOKA quality gates: schema validation, row count checks, anomaly detection",
+        config_docs={
+            "schema": "dict — type validation {field: type}",
+            "required": "list[string] — non-null fields",
+            "expect_rows": "string — row count range (e.g. '100..5000')",
+            "expect_no_nulls": "list[string] — fields that must not be null",
+            "andon": "bool — enable anomaly detection vs historical data",
+        },
+    )
     """Quality gate: validate data schema and detect anomalies.
 
     YAML usage:

@@ -9,7 +9,7 @@ import asyncio
 import json
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 
 
 @StepRegistry.register("railway")
@@ -23,6 +23,18 @@ class RailwayStep(BaseStep):
         service: consciousness-revolution
         lines: 50
     """
+
+    meta = StepMeta(
+        is_source=True,
+        required_config=("action",),
+        description="Railway.app integration",
+        config_docs={
+            "action": "string — Railway action to perform (status|logs|deploy|variables)",
+            "project": "string — Railway project name",
+            "service": "string — Railway service name",
+            "lines": "int — number of log lines to retrieve (default 50)",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         action = self.config.get("action", "status")

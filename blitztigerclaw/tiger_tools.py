@@ -525,193 +525,24 @@ def handle_read_pipeline(input: dict) -> str:
 
 def handle_list_step_types(_input: dict) -> str:
     """Show available step types and their configs."""
-    # Import step modules to populate the registry
-    import blitztigerclaw.steps.fetch
-    import blitztigerclaw.steps.transform
-    import blitztigerclaw.steps.load
-    import blitztigerclaw.steps.file
-    import blitztigerclaw.steps.scrape
-    import blitztigerclaw.steps.guard
-    import blitztigerclaw.steps.parallel
-    import blitztigerclaw.steps.shell
-    import blitztigerclaw.steps.railway
-    import blitztigerclaw.steps.netlify
-    import blitztigerclaw.steps.github
-    import blitztigerclaw.steps.aggregate
-    import blitztigerclaw.steps.cache
-    import blitztigerclaw.steps.clean
-    import blitztigerclaw.steps.branch
-    import blitztigerclaw.steps.join
-    from blitztigerclaw.steps import StepRegistry
+    from blitztigerclaw.steps import StepRegistry, discover
 
-    step_docs = {
-        "fetch": {
-            "description": "Async HTTP fetching with parallel requests, retry, DNS caching",
-            "config": {
-                "url": "string — single URL to fetch",
-                "urls": "list[string] — multiple URLs",
-                "parallel": "int — concurrent requests (default 10)",
-                "retry": "int — retry count on failure (default 0)",
-                "timeout": "int — request timeout in seconds (default 30)",
-                "headers": "dict — custom HTTP headers",
-                "method": "string — HTTP method (default GET)",
-                "extract": "string — JSONPath to extract from response",
-            },
-            "streaming": True,
-        },
-        "transform": {
-            "description": "Data transformation: select, filter, compute, sort, dedupe, limit",
-            "config": {
-                "select": "list[string] — keep only these fields",
-                "rename": "dict — rename fields {old: new}",
-                "filter": "string — expression to filter rows (e.g. 'value > 100')",
-                "compute": "dict — add computed fields {name: expression}",
-                "flatten": "string — JSONPath to extract nested data",
-                "sort": "string — sort by field (e.g. 'value desc')",
-                "dedupe": "list[string] — deduplicate by these keys",
-                "limit": "int — keep first N rows",
-            },
-            "streaming": "partial (not with sort/dedupe/limit)",
-        },
-        "load": {
-            "description": "Output data to SQLite, CSV, JSON, or stdout",
-            "config": {
-                "target": "string — 'sqlite:///path.db', 'csv:///path.csv', 'json:///path.json', or 'stdout'",
-                "table": "string — table name for SQLite",
-                "mode": "string — 'insert', 'upsert', or 'replace' (SQLite)",
-                "key": "string — upsert key column",
-                "batch_size": "int — rows per batch insert (default 500)",
-            },
-            "streaming": "partial",
-        },
-        "file": {
-            "description": "File I/O: read JSON/CSV, glob patterns, write files",
-            "config": {
-                "action": "string — 'read', 'write', or 'glob'",
-                "path": "string — file path or glob pattern",
-                "format": "string — 'json' or 'csv'",
-            },
-            "streaming": False,
-        },
-        "scrape": {
-            "description": "HTML scraping with CSS selectors",
-            "config": {
-                "url": "string — URL to scrape",
-                "urls": "list[string] — multiple URLs",
-                "select": "dict — {field_name: css_selector}",
-                "parallel": "int — concurrent requests",
-            },
-            "streaming": False,
-        },
-        "guard": {
-            "description": "JIDOKA quality gates: schema validation, row count checks, anomaly detection",
-            "config": {
-                "schema": "dict — type validation {field: type}",
-                "required": "list[string] — non-null fields",
-                "expect_rows": "string — row count range (e.g. '100..5000')",
-                "expect_no_nulls": "list[string] — fields that must not be null",
-                "andon": "bool — enable anomaly detection vs historical data",
-            },
-            "streaming": False,
-        },
-        "parallel": {
-            "description": "Async step orchestration — run multiple tasks concurrently",
-            "config": {
-                "tasks": "list — parallel task definitions",
-            },
-            "streaming": False,
-        },
-        "shell": {
-            "description": "Execute shell commands",
-            "config": {
-                "command": "string — shell command to execute",
-            },
-            "streaming": False,
-        },
-        "railway": {
-            "description": "Railway.app integration",
-            "config": {
-                "action": "string — Railway action to perform",
-            },
-            "streaming": False,
-        },
-        "netlify": {
-            "description": "Netlify integration",
-            "config": {
-                "action": "string — Netlify action to perform",
-            },
-            "streaming": False,
-        },
-        "github": {
-            "description": "GitHub API integration",
-            "config": {
-                "action": "string — GitHub action to perform",
-            },
-            "streaming": False,
-        },
-        "aggregate": {
-            "description": "SQL-style GROUP BY + aggregation (sum, avg, min, max, count, count_distinct)",
-            "config": {
-                "group_by": "list[string] — fields to group on (optional for global agg)",
-                "functions": "dict — {alias: 'func(field)'} e.g. {'total': 'sum(revenue)'}",
-                "having": "string — post-aggregation filter expression",
-                "sort": "string — sort results (e.g. 'total desc')",
-            },
-            "streaming": False,
-        },
-        "cache": {
-            "description": "Fetch result caching with TTL — prevents re-fetching across runs",
-            "config": {
-                "key": "string — cache key (supports variable expansion)",
-                "ttl": "int — time-to-live in seconds (default 3600)",
-                "action": "string — auto | read | write | clear (default auto)",
-                "dir": "string — cache directory (default .blitztigerclaw_cache)",
-            },
-            "streaming": False,
-        },
-        "clean": {
-            "description": "Data cleaning & type coercion — POKA-YOKE for data",
-            "config": {
-                "coerce": "dict — type casting {field: int|float|bool|str}",
-                "defaults": "dict — fill missing/null values {field: default}",
-                "trim": "list[string] — strip whitespace from fields",
-                "lowercase": "list[string] — lowercase string fields",
-                "uppercase": "list[string] — uppercase string fields",
-                "replace": "dict — string replacement {field: {old: new}}",
-                "drop_nulls": "list[string] — drop rows where fields are null",
-                "drop_empty": "list[string] — drop rows where fields are empty",
-                "rename": "dict — rename fields {old: new}",
-            },
-            "streaming": True,
-        },
-        "branch": {
-            "description": "Conditional routing — route data through different processing paths",
-            "config": {
-                "on": "string — field to branch on (field-match mode)",
-                "routes": "dict — route definitions with step lists or when expressions",
-                "merge": "bool — merge all route outputs (default true)",
-            },
-            "streaming": False,
-        },
-        "join": {
-            "description": "Dataset merge/join — SQL-style JOIN on shared keys",
-            "config": {
-                "right": "string — right-side source (sqlite:///path, csv:///path, json:///path, context:step_N)",
-                "right_table": "string — table name for SQLite source",
-                "on": "string — join key (same name both sides)",
-                "left_on": "string — left key (when names differ)",
-                "right_on": "string — right key (when names differ)",
-                "how": "string — inner | left | outer (default inner)",
-                "select_right": "list[string] — only keep these right-side fields",
-                "prefix_right": "string — prefix right-side fields to avoid collision",
-            },
-            "streaming": False,
-        },
-    }
+    discover()
 
-    registered = StepRegistry.list_types()
+    step_docs = {}
+    for name, meta in StepRegistry.all_meta().items():
+        step_docs[name] = {
+            "description": meta.description,
+            "config": dict(meta.config_docs),
+            "streaming": (
+                True if meta.streaming == "yes"
+                else "partial" if meta.streaming == "conditional"
+                else False
+            ),
+        }
+
     return json.dumps({
-        "registered_types": registered,
+        "registered_types": StepRegistry.list_types(),
         "step_docs": step_docs,
     })
 

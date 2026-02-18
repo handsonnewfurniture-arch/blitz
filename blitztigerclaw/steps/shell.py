@@ -4,12 +4,22 @@ import asyncio
 import shlex
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 
 
 @StepRegistry.register("shell")
 class ShellStep(BaseStep):
     """Run a shell command and capture output."""
+
+    meta = StepMeta(
+        is_source=True,
+        description="Execute shell commands",
+        config_docs={
+            "command": "string — shell command to execute",
+            "timeout": "int — timeout in seconds (default 60)",
+            "capture": "string — output mode: lines | raw | json (default lines)",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         command = self.config.get("command", "")

@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 from blitztigerclaw.utils.expr import compile_expr
 from blitztigerclaw.context import Context
 
@@ -43,6 +43,16 @@ class BranchStep(BaseStep):
               - transform: { compute: { tier: "'starter'" } }
         merge: true
     """
+
+    meta = StepMeta(
+        default_strategy="async",
+        description="Conditional routing — route data through different processing paths",
+        config_docs={
+            "on": "string — field to branch on (field-match mode)",
+            "routes": "dict — route definitions with step lists or when expressions",
+            "merge": "bool — merge all route outputs (default true)",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         data = self.context.data

@@ -10,7 +10,7 @@ from __future__ import annotations
 import string
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 from blitztigerclaw.utils.cache import FileCache
 
 
@@ -31,6 +31,16 @@ class CacheStep(BaseStep):
       write — Force-write current context.data to cache.
       clear — Clear cache for this key.
     """
+
+    meta = StepMeta(
+        description="Fetch result caching with TTL — prevents re-fetching across runs",
+        config_docs={
+            "key": "string — cache key (supports variable expansion)",
+            "ttl": "int — time-to-live in seconds (default 3600)",
+            "action": "string — auto | read | write | clear (default auto)",
+            "dir": "string — cache directory (default .blitztigerclaw_cache)",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         ttl = self.config.get("ttl", 3600)

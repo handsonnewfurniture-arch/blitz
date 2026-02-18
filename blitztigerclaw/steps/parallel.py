@@ -19,12 +19,20 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from blitztigerclaw.steps import BaseStep, StepRegistry
+from blitztigerclaw.steps import BaseStep, StepMeta, StepRegistry
 
 
 @StepRegistry.register("parallel")
 class ParallelStep(BaseStep):
     """Execute multiple step branches concurrently and merge results."""
+
+    meta = StepMeta(
+        default_strategy="async",
+        description="Async step orchestration — run multiple tasks concurrently",
+        config_docs={
+            "tasks": "list — parallel task definitions",
+        },
+    )
 
     async def execute(self) -> list[dict[str, Any]]:
         branches = self.config.get("branches", [])
