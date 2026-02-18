@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blitztigerclaw-framework"
-version = "0.2.0"
+version = "0.3.0"
 description = "100x efficiency data automation framework"
 requires-python = ">=3.10"
 dependencies = [
@@ -19,7 +19,8 @@ dependencies = [
 fast = ["orjson>=3.9"]
 scrape = ["beautifulsoup4>=4.12", "lxml>=4.9"]
 dev = ["pytest>=7.0", "pytest-asyncio>=0.23"]
-all = ["orjson>=3.9", "beautifulsoup4>=4.12", "lxml>=4.9"]
+tiger = ["anthropic>=0.40"]
+all = ["orjson>=3.9", "beautifulsoup4>=4.12", "lxml>=4.9", "anthropic>=0.40"]
 
 [project.scripts]
 blitztigerclaw = "blitztigerclaw.cli:cli"

@@ -1,0 +1,36 @@
+name: test_dag_graph
+description: Explicit DAG with parallel data sources
+graph:
+  load_products:
+    step: file
+    config:
+      action: read
+      path: test_data.json
+      format: json
+
+  clean_products:
+    step: clean
+    after: load_products
+    config:
+      coerce:
+        age: int
+        price: float
+      trim: [name]
+      drop_nulls: [id]
+
+  aggregate_by_category:
+    step: aggregate
+    after: clean_products
+    config:
+      group_by: [category]
+      functions:
+        total_revenue: "sum(price)"
+        item_count: "count(id)"
+        avg_price: "avg(price)"
+      sort: "total_revenue desc"
+
+  output:
+    step: load
+    after: aggregate_by_category
+    config:
+      target: stdout

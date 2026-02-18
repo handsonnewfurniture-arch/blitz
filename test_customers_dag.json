@@ -1,0 +1,5 @@
+[
+  {"customer_id": "C1", "name": "  Alice  ", "email": "ALICE@CORP.COM", "tier": "gold"},
+  {"customer_id": "C2", "name": "Bob  ", "email": "BOB@LLC.COM", "tier": "silver"},
+  {"customer_id": "C4", "name": "Diana", "email": "DIANA@INC.COM", "tier": "platinum"}
+]

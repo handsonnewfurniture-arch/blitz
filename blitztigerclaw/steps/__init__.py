@@ -6,8 +6,8 @@ class BaseStep(ABC):
     """Base class for all pipeline steps.
 
     v0.2.0: Added streaming interface (execute_stream / supports_streaming).
-    Steps that support streaming can process data row-by-row without
-    materializing the full dataset in memory.
+    v0.4.0: Added schema declarations (input_schema / output_schema) for
+    typed DAG execution and projection pushdown.
     """
 
     def __init__(self, config: dict[str, Any], context: "Context"):
@@ -41,6 +41,23 @@ class BaseStep(ABC):
         Override to return True in steps that implement execute_stream natively.
         """
         return False
+
+    def input_schema(self) -> "DataSchema | None":
+        """Declare the schema this step expects as input.
+
+        Override to enable schema-aware optimization (projection pushdown).
+        Return None if the step accepts any schema (default).
+        """
+        return None
+
+    def output_schema(self, input_schema: "DataSchema | None" = None) -> "DataSchema | None":
+        """Declare the schema this step produces.
+
+        Override to enable schema propagation through the DAG.
+        Receives the input schema for steps that transform it.
+        Return None if the output schema is unknown (default).
+        """
+        return None
 
 
 class StepRegistry:

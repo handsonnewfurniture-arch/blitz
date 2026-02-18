@@ -1,6 +1,6 @@
 """BlitzTigerClaw — 100x efficiency data automation framework."""
 
-__version__ = "0.2.0"
+__version__ = "0.4.0"
 
 from blitztigerclaw.parser import parse_pipeline
 from blitztigerclaw.pipeline import Pipeline

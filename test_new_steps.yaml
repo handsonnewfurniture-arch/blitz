@@ -1,0 +1,25 @@
+name: test_new_steps
+description: Integration test for v0.3.0 step types
+steps:
+  - file:
+      action: read
+      path: test_data.json
+      format: json
+  - clean:
+      coerce:
+        age: int
+        price: float
+      defaults:
+        status: "unknown"
+      trim: [name]
+      lowercase: [email]
+      drop_nulls: [id]
+  - aggregate:
+      group_by: [category]
+      functions:
+        total: "sum(price)"
+        count: "count(id)"
+        avg_price: "avg(price)"
+      sort: "total desc"
+  - load:
+      target: stdout

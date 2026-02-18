@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from blitztigerclaw.context import Context
 from blitztigerclaw.optimizer import Optimizer
+from blitztigerclaw.planner import Planner
+from blitztigerclaw.executor import DagExecutor
 from blitztigerclaw.exceptions import StepError
 from blitztigerclaw.checkpoint import CheckpointManager
 
@@ -23,6 +25,11 @@ import blitztigerclaw.steps.railway
 import blitztigerclaw.steps.netlify
 import blitztigerclaw.steps.github
 import blitztigerclaw.steps.parallel
+import blitztigerclaw.steps.aggregate
+import blitztigerclaw.steps.cache
+import blitztigerclaw.steps.clean
+import blitztigerclaw.steps.branch
+import blitztigerclaw.steps.join
 
 from blitztigerclaw.steps import StepRegistry
 from blitztigerclaw.tps.metrics import MetricsStore
@@ -31,16 +38,16 @@ from blitztigerclaw.tps.change_detector import ChangeDetector
 
 
 class Pipeline:
-    """Executes a parsed pipeline definition step by step.
+    """Executes a parsed pipeline definition.
 
-    Integrates Toyota Production System principles:
-    - KAIZEN: Records metrics for every run
-    - KANBAN: Tracks pipeline state on board
-    - JIT: Skips steps when data unchanged
-    - MUDA: Warns on dead/wasteful steps
+    v0.4.0: DAG execution model — compiles YAML into an optimized
+    directed acyclic graph via the Planner, then executes with
+    DagExecutor (concurrent independent nodes, operator fusion).
 
-    v0.2.0: Dual execution path (sequential + streaming),
-    checkpoint/resume support, memory tracking.
+    Falls back to legacy sequential/streaming execution for
+    checkpoint resume.
+
+    TPS principles: KAIZEN (metrics), KANBAN (board), JIT, MUDA.
     """
 
     def __init__(
@@ -71,13 +78,6 @@ class Pipeline:
         )
         context.vars["_pipeline_name"] = self.definition.name
 
-        # Check for streaming eligibility
-        step_configs = [
-            (s.step_type, s.config) for s in self.definition.steps
-        ]
-        use_streaming = self.optimizer.should_stream_pipeline(step_configs)
-        context.streaming_mode = use_streaming
-
         started_at = time.time()
         status = "completed"
         error_message = None
@@ -86,8 +86,9 @@ class Pipeline:
         if self.kanban_id:
             self.kanban.update_state(self.kanban_id, "in_progress")
 
-        # Resume from checkpoint if available
+        # Resume from checkpoint: fall back to legacy sequential executor
         start_step = 0
+        use_legacy = False
         if self.resume and self.checkpoint:
             saved = self.checkpoint.load()
             if saved is not None:
@@ -107,12 +108,13 @@ class Pipeline:
                         f"  Resuming from step {start_step + 1} "
                         f"({len(context.data)} rows from checkpoint)"
                     )
+                use_legacy = True  # Checkpoint resume uses legacy path
 
         try:
-            if use_streaming and start_step == 0:
-                await self._run_streaming(context)
-            else:
+            if use_legacy:
                 await self._run_sequential(context, start_step)
+            else:
+                await self._run_dag(context)
 
         except Exception as e:
             status = "failed"
@@ -170,6 +172,42 @@ class Pipeline:
                 self.checkpoint.clear()
 
         return context
+
+    async def _run_dag(self, context: Context):
+        """v0.4.0: DAG execution path — compile, optimize, execute."""
+        planner = Planner()
+
+        # Compile to DAG
+        if self.definition.graph:
+            dag = planner.compile_graph(self.definition.graph, self.definition.vars)
+        else:
+            step_list = [
+                (s.step_type, s.config) for s in self.definition.steps
+            ]
+            dag = planner.compile_linear(step_list)
+
+        # Optimize
+        dag = planner.optimize(dag)
+
+        if self.verbose:
+            # Show optimization results
+            fused_count = sum(
+                1 for n in dag.nodes.values() if n.step_type == "_fused"
+            )
+            parallel_count = sum(
+                1 for g in dag.parallel_groups() if len(g) > 1
+            )
+            if fused_count or parallel_count:
+                parts = []
+                if fused_count:
+                    parts.append(f"{fused_count} fused")
+                if parallel_count:
+                    parts.append(f"{parallel_count} parallel groups")
+                print(f"  [optimizer: {', '.join(parts)}]")
+
+        # Execute
+        executor = DagExecutor(dag, verbose=self.verbose)
+        await executor.execute(context)
 
     async def _run_sequential(self, context: Context, start_step: int = 0):
         """Standard step-by-step execution."""

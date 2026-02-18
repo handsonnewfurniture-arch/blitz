@@ -37,6 +37,22 @@ class Optimizer:
         if step_type == "parallel":
             return "async"
 
+        if step_type == "aggregate":
+            if len(context.data) > 50_000:
+                return "multiprocess"
+            return "sync"
+
+        if step_type == "clean":
+            if len(context.data) > 5_000:
+                return "streaming"
+            return "sync"
+
+        if step_type == "branch":
+            return "async"
+
+        if step_type in ("cache", "join"):
+            return "sync"
+
         return "sync"
 
     def should_stream_pipeline(self, step_configs: list[tuple[str, dict]]) -> bool:
@@ -44,7 +60,7 @@ class Optimizer:
 
         Returns True if all steps support streaming and data is expected to be large.
         """
-        streamable_types = {"fetch", "transform", "load"}
+        streamable_types = {"fetch", "transform", "load", "clean"}
         for step_type, config in step_configs:
             if step_type not in streamable_types:
                 return False

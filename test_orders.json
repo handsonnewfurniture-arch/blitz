@@ -1,0 +1,6 @@
+[
+  {"order_id": "ORD-1", "customer_id": "C1", "product": "Widget", "amount": "99.99"},
+  {"order_id": "ORD-2", "customer_id": "C2", "product": "Gadget", "amount": "149.50"},
+  {"order_id": "ORD-3", "customer_id": "C1", "product": "Doohickey", "amount": "29.99"},
+  {"order_id": "ORD-4", "customer_id": "C3", "product": "Thingamajig", "amount": "199.00"}
+]

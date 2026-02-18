@@ -134,5 +134,123 @@ cli.add_command(queue)
 cli.add_command(work)
 
 
+# ---------------------------------------------------------------------------
+# Tiger AI Agent commands
+# ---------------------------------------------------------------------------
+
+@cli.group()
+def tiger():
+    """Tiger AI Agent — autonomous pipeline creation and execution."""
+
+
+@tiger.command()
+def setup():
+    """Configure Tiger's Claude API key."""
+    from blitztigerclaw.tiger import save_api_key
+
+    api_key = click.prompt(
+        "Enter your Anthropic API key",
+        hide_input=True,
+    )
+    if not api_key.startswith("sk-ant-"):
+        click.echo("Warning: key doesn't look like an Anthropic API key (expected sk-ant-...)")
+        if not click.confirm("Save anyway?"):
+            return
+
+    save_api_key(api_key)
+    click.echo("API key saved to ~/.blitztigerclaw/tiger_api_key")
+    click.echo("Test it: blitztigerclaw tiger run \"list my pipelines\"")
+
+
+@tiger.command("run")
+@click.argument("goal")
+def tiger_run(goal):
+    """One-shot autonomous execution of a goal.
+
+    Example: blitztigerclaw tiger run "fetch posts from jsonplaceholder and store in posts.db"
+    """
+    from blitztigerclaw.tiger import TigerAgent
+
+    try:
+        agent = TigerAgent()
+    except RuntimeError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"Tiger is working on: {goal}\n")
+
+    try:
+        result = agent.run_goal(goal)
+        click.echo(result)
+    except Exception as e:
+        click.echo(f"\nTiger error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@tiger.command("chat")
+def tiger_chat():
+    """Interactive conversation with Tiger.
+
+    Type your messages and Tiger will create/run/manage pipelines for you.
+    Type 'exit' or 'quit' to end the session.
+    """
+    from blitztigerclaw.tiger import TigerAgent
+
+    try:
+        agent = TigerAgent()
+    except RuntimeError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+    click.echo("Tiger AI Agent — Interactive Mode")
+    click.echo("Type 'exit' or 'quit' to end.\n")
+
+    while True:
+        try:
+            message = click.prompt("You", prompt_suffix="> ")
+        except (EOFError, KeyboardInterrupt):
+            click.echo("\nGoodbye!")
+            break
+
+        if message.strip().lower() in ("exit", "quit", "q"):
+            click.echo("Goodbye!")
+            break
+
+        try:
+            response = agent.chat(message)
+            click.echo(f"\nTiger> {response}\n")
+        except Exception as e:
+            click.echo(f"\nTiger error: {e}\n", err=True)
+
+
+@tiger.command("watch")
+@click.option("--interval", "-i", default=60, help="Check interval in seconds")
+def tiger_watch(interval):
+    """Daemon monitoring mode — watches queue, auto-heals failures.
+
+    Tiger will continuously monitor the KANBAN queue, process pending pipelines,
+    and attempt to recover failed pipelines using checkpoints or Claude diagnosis.
+    """
+    from blitztigerclaw.tiger import TigerAgent
+
+    try:
+        agent = TigerAgent()
+    except RuntimeError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"Tiger Watch Mode — checking every {interval}s")
+    click.echo("Press Ctrl+C to stop.\n")
+
+    def _on_event(event: str, details: str = ""):
+        ts = __import__("datetime").datetime.now().strftime("%H:%M:%S")
+        if details:
+            click.echo(f"  [{ts}] {event}: {details}")
+        else:
+            click.echo(f"  [{ts}] {event}")
+
+    agent.monitor(interval=interval, on_event=_on_event)
+
+
 if __name__ == "__main__":
     cli()

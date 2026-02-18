@@ -1,0 +1,8 @@
+[
+  {"id": "1", "name": "  Alice  ", "email": "Alice@Test.COM", "age": "30", "price": "19.99", "category": "electronics"},
+  {"id": "2", "name": "Bob  ", "email": "BOB@test.com", "age": "25", "price": "49.50", "category": "electronics"},
+  {"id": "3", "name": " Charlie", "email": "CHARLIE@Test.Com", "age": "35", "price": "9.99", "category": "books"},
+  {"id": "4", "name": "Diana", "email": "Diana@TEST.com", "age": "28", "price": "29.99", "category": "books"},
+  {"id": "5", "name": "Eve", "email": "Eve@test.COM", "age": "32", "price": "99.99", "category": "electronics"},
+  {"id": null, "name": "Ghost", "email": "ghost@null.com", "age": "0", "price": "0.00", "category": "invalid"}
+]

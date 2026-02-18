@@ -1,0 +1,43 @@
+name: test_parallel_dag
+description: Two independent data sources fetched in parallel, then joined
+graph:
+  load_orders:
+    step: file
+    config:
+      action: read
+      path: test_orders.json
+      format: json
+
+  load_customers:
+    step: file
+    config:
+      action: read
+      path: test_customers_dag.json
+      format: json
+
+  clean_orders:
+    step: clean
+    after: load_orders
+    config:
+      coerce:
+        amount: float
+
+  clean_customers:
+    step: clean
+    after: load_customers
+    config:
+      lowercase: [email]
+      trim: [name]
+
+  join_data:
+    step: join
+    after: [clean_orders, clean_customers]
+    config:
+      "on": customer_id
+      how: left
+
+  output:
+    step: load
+    after: join_data
+    config:
+      target: stdout

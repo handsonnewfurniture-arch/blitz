@@ -18,11 +18,14 @@ class Context:
     """Shared runtime context that flows data between pipeline steps.
 
     v0.2.0: Added memory tracking (memory_mb, peak_buffer_rows).
+    v0.4.0: Added multi-input support (inputs dict) for DAG nodes.
     """
 
     data: list[dict[str, Any]] = field(default_factory=list)
     vars: dict[str, Any] = field(default_factory=dict)
     results: list[StepResult] = field(default_factory=list)
+    # v0.4.0: Multi-input support for DAG nodes (e.g. join receives two datasets)
+    inputs: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     _start_time: float = field(default_factory=time.time)
     pipeline_name: str = ""
     jit_steps_skipped: int = 0
